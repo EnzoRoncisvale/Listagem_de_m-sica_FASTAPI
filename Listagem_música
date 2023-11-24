@@ -1,0 +1,71 @@
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+import uvicorn
+import json
+import os
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+class Musica(BaseModel):
+    nome: str
+    artista: str
+    album: str
+    ano: int
+
+# Função para carregar as músicas do arquivo
+def carregar_musicas():
+    try:
+        with open("musicas.txt", "r") as arquivo:
+            conteudo = arquivo.read()
+            if conteudo:
+                return json.loads(conteudo)
+            else:
+                return []
+    except FileNotFoundError:
+        return []
+    except json.JSONDecodeError:
+        return []
+
+
+# Função para salvar as músicas no arquivo
+def salvar_musicas(musicas):
+    with open("musicas.txt", "w") as arquivo:
+        json.dump(musicas, arquivo)
+
+@app.get("/musicas", response_class=HTMLResponse)
+async def listar_musicas(request: Request):
+    musicas = carregar_musicas()
+    return templates.TemplateResponse("listar_musicas.html", {"request": request, "musicas": musicas})
+
+@app.post("/musicas")
+async def adicionar_musica(musica: Musica):
+    musicas = carregar_musicas()
+    musicas.append(musica.dict())
+    salvar_musicas(musicas)
+    return {"mensagem": "Música adicionada com sucesso!"}
+
+@app.put("/musicas/{musica_id}")
+async def atualizar_musica(musica_id: int, musica: Musica):
+    musicas = carregar_musicas()
+    if 1 <= musica_id <= len(musicas):
+        musicas[musica_id - 1] = musica.dict()
+        salvar_musicas(musicas)
+        return {"mensagem": "Música atualizada com sucesso!"}
+    else:
+        return {"mensagem": "Música não encontrada"}
+
+@app.delete("/musicas/{musica_id}")
+async def remover_musica(musica_id: int):
+    musicas = carregar_musicas()
+    if 1 <= musica_id <= len(musicas):
+        musica_removida = musicas.pop(musica_id - 1)
+        salvar_musicas(musicas)
+        return {"mensagem": "Música removida com sucesso!", "musica_removida": musica_removida}
+    else:
+        return {"mensagem": "Música não encontrada"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host='localhost', port=8000)
